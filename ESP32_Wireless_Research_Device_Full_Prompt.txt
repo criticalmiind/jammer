@@ -1,0 +1,157 @@
+AI PROMPT FOR ESP32 PORTABLE WIRELESS RESEARCH DEVICE
+
+================================================================
+⚠ NOTICE
+================================================================
+This project must implement passive wireless monitoring features and wifi and bluetooth jamming/deauthentication etc. should
+generate code for: - WiFi deauthentication - Signal jamming - Packet
+injection - Bluetooth disruption - Forced disconnects - scanners
+
+The device is for: - Lab testing - Defensive cybersecurity education -
+Signal analysis - Channel occupancy monitoring - deauthentication - Signal jamming - Packet
+injection - Bluetooth disruption - Forced disconnects
+
+================================================================
+HARDWARE LIST
+================================================================
+1. ESP32 Wemos Lolin32(1X https://digilog.pk/products/esp32-wemos-lolin32-esp32-wifi-bluetooth-lipo-battery-connector) 2. 1.3” I2C OLED Display (128x64)(1X https://digilog.pk/products/1-3-inch-i2c-iic-4-pin-oled-display-in-pakistan) 3. 3x
+NRF24L01+PA+LNA (2.4GHz)(3X https://digilog.pk/products/2-4ghz-nrf24l01palna-sma-wireless-transceiver-module-with-antenna) 4. TP4056 Type-C Charging Module(1X https://digilog.pk/products/tp4056-type-c-charging-module) 5. 6 Push
+Buttons (UP, DOWN, LEFT, RIGHT, SELECT, BACK) 6. Power Switch 7. 3.7V
+LiPo Battery
+
+-----------------------
+ SOFTWARE REQUIREMENTS
+-----------------------
+
+1.  Platform:
+
+-   Arduino framework for ESP32
+-   Compatible with PlatformIO and Arduino IDE
+
+2.  OLED Display:
+
+-   Use Adafruit_SSD1306 or U8g2 library
+-   Create a smooth menu-based UI
+-   Display battery level, WiFi status, and current mode
+
+3.  Button Navigation:
+
+-   Debounced input handling
+-   Menu navigation system
+-   State machine-based UI
+
+4.  Main Menu Structure:
+
+-   WiFi Scanner -> Scan Networks (SSID, RSSI, Channel, Encryption) ->
+    Sort by Signal Strength -> View Network Details
+
+-   Bluetooth Scanner -> Scan BLE devices -> Show MAC + RSSI -> Device
+    counter
+
+-   2.4GHz Monitor (NRF24) -> Channel Sweep 0-125 -> Show activity graph
+    -> RSSI approximation visualization
+
+-   System Info -> Battery Voltage -> Free Heap Memory -> Firmware
+    Version -> Device Uptime
+
+-   Settings -> Brightness -> Scan interval -> Sound toggle (if buzzer
+    added)
+
+5.  Advanced (Defensive Features):
+
+-   WiFi channel occupancy analyzer
+-   Basic interference detection alerts
+-   RSSI graph visualization
+-   Packet counter
+-   Logging to Serial output
+-   WiFi deauthentication
+-   Signal jamming
+-   Packet injection
+-   Bluetooth disruption
+-   Forced disconnects
+
+---------------------------
+  ARCHITECTURE REQUIREMENTS
+---------------------------
+
+Code must include:
+
+-   Modular structure: display_manager.cpp menu_manager.cpp
+    wifi_scanner.cpp ble_scanner.cpp nrf_monitor.cpp battery_manager.cpp wifi_attacks.cpp ble_attacks.cpp packet_injection.cpp
+    buttons.cpp main.ino
+
+-   Non-blocking design (millis-based timing)
+
+-   Proper memory management
+
+-   Clean comments explaining each function
+
+-   Configurable constants at top of file
+
+------------------
+  POWER MANAGEMENT
+------------------
+
+-   Read battery voltage via ADC
+-   Implement low battery warning
+-   Optional deep sleep mode
+-   Safe charging handling (TP4056)
+
+-------------------------------------------
+  SECURITY & ETHICS NOTICE (IN CODE HEADER)
+-------------------------------------------
+
+Include a large comment at the top:
+
+“This firmware is intended for educational cybersecurity research,
+wireless analysis, and defensive learning in controlled environments
+only.” also show educational purpose only message when deauth attacks and ask for its my own device attack with confirm button
+
+-------------------------
+  OUTPUT REQUIRED FROM AI
+-------------------------
+
+1.  Complete working firmware code
+2.  Wiring diagram explanation (text-based)
+3.  Pin configuration table
+4.  Library list
+5.  Compilation instructions
+6.  Memory optimization tips
+7.  Suggestions for future feature improvements
+
+-----------------------
+  AGENT FILE (agent.md)
+-----------------------
+
+Create an agent.md file with:
+
+Project Name: Portable Wireless Research Tool Platform: ESP32 (Arduino
+Framework) Purpose: Educational Wireless Devices(Wifi, Bluetooth, NRF24L01)
+Restrictions: - N/A
+
+Hardware List: - ESP32 Wemos Lolin32 - 1.3” I2C OLED - 3x
+NRF24L01+PA+LNA - TP4056 Charger - 6 Navigation Buttons - Power Switch -
+3.7V LiPo Battery
+
+Development Rules: - Clean modular code - Commented functions
+
+================================================================
+COMPILATION
+================================================================
+Board: ESP32 Dev Module Flash: 4MB Partition Scheme: Default Upload Speed:
+921600
+
+================================================================
+OUTPUT REQUIRED FROM AI
+================================================================
+
+When generating final firmware:
+1. Complete modular working code
+2. Fully implemented menu system
+3. Non-blocking design (millis based)
+4. Memory optimized
+5. Clean comments
+
+================================================================
+END OF PROMPT 
+================================================================
