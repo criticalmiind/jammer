@@ -99,36 +99,36 @@ Inline between TP4056 OUT+ and ESP32 power rail.
                  │     │
         ESP32 VIN    GND
                  │     │
-    ┌────────────┴─────┴────────────────┐
-    │          ESP32 Wemos Lolin32      │
+    ┌────────────┴─────┴─────────────────┐
+    │          ESP32 Wemos Lolin32       │
     │                                    │
-    │  GPIO21(SDA)──►OLED SDA           │
-    │  GPIO22(SCL)──►OLED SCL           │
+    │  GPIO21(SDA)──►OLED SDA            │
+    │  GPIO22(SCL)──►OLED SCL            │
     │                                    │
-    │  GPIO4 ──►NRF1 CE                 │
-    │  GPIO5 ──►NRF1 CSN                │
-    │  GPIO18──►NRF1 SCK  (VSPI)       │
-    │  GPIO23──►NRF1 MOSI              │
-    │  GPIO19──►NRF1 MISO              │
+    │  GPIO4 ──►NRF1 CE                  │
+    │  GPIO5 ──►NRF1 CSN                 │
+    │  GPIO18──►NRF1 SCK  (VSPI)         │
+    │  GPIO23──►NRF1 MOSI                │
+    │  GPIO19──►NRF1 MISO                │
     │                                    │
-    │  GPIO16──►NRF2 CE                 │
-    │  GPIO17──►NRF2 CSN                │
-    │  GPIO14──►NRF2 SCK  (HSPI)       │
-    │  GPIO13──►NRF2 MOSI              │
-    │  GPIO12──►NRF2 MISO              │
+    │  GPIO16──►NRF2 CE                  │
+    │  GPIO17──►NRF2 CSN                 │
+    │  GPIO14──►NRF2 SCK  (HSPI)         │
+    │  GPIO13──►NRF2 MOSI                │
+    │  GPIO12──►NRF2 MISO                │
     │                                    │
-    │  GPIO2 ──►NRF3 CE                 │
-    │  GPIO0 ──►NRF3 CSN               │
-    │  (shares HSPI bus with NRF2)      │
+    │  GPIO2 ──►NRF3 CE                  │
+    │  GPIO0 ──►NRF3 CSN                 │
+    │  (shares HSPI bus with NRF2)       │
     │                                    │
-    │  GPIO32──►BTN UP    (pull-up)     │
-    │  GPIO33──►BTN DOWN  (pull-up)     │
-    │  GPIO25──►BTN LEFT  (pull-up)     │
-    │  GPIO26──►BTN RIGHT (pull-up)     │
-    │  GPIO27──►BTN SELECT(pull-up)     │
-    │  GPIO15──►BTN BACK  (pull-up)     │
+    │  GPIO32──►BTN UP    (pull-up)      │
+    │  GPIO33──►BTN DOWN  (pull-up)      │
+    │  GPIO25──►BTN LEFT  (pull-up)      │
+    │  GPIO26──►BTN RIGHT (pull-up)      │
+    │  GPIO27──►BTN SELECT(pull-up)      │
+    │  GPIO15──►BTN BACK  (pull-up)      │
     │                                    │
-    │  GPIO34──►VBAT divider (ADC)      │
+    │  GPIO34──►VBAT divider (ADC)       │
     └────────────────────────────────────┘
 ```
 
