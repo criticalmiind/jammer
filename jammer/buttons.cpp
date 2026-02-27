@@ -10,12 +10,12 @@
 
 // Pin list matching the ButtonEvent enum order (index 0 unused)
 static const uint8_t _pins[] = {
-  BTN_UP, BTN_DOWN, BTN_LEFT, BTN_RIGHT, BTN_SELECT, BTN_BACK
+  BTN_UP, BTN_DOWN, BTN_SELECT, BTN_BACK
 };
 static const uint8_t _numBtns = sizeof(_pins) / sizeof(_pins[0]);
 
 // Stores the last trigger time for each button
-static unsigned long _lastPress[6] = {0};
+static unsigned long _lastPress[4] = {0};
 
 /*
  * buttons_init()

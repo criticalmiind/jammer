@@ -18,8 +18,7 @@ static unsigned long _lastRead = 0;
  * conflicts with WiFi on ESP32.
  */
 void battery_init() {
-  analogReadResolution(12);            // 0-4095
-  analogSetAttenuation(ADC_11db);      // Full 0-3.3 V range
+
   pinMode(BATTERY_PIN, INPUT);
   battery_update();                    // Take an initial reading
   DBGLN(F("[BATT] Battery manager initialized"));
@@ -42,8 +41,8 @@ void battery_update() {
   }
   float adcAvg = (float)sum / BATT_SAMPLES;
 
-  // Convert ADC to voltage (12-bit, 3.3V reference)
-  float pinVoltage = (adcAvg / 4095.0) * 3.3;
+  // Convert ADC to voltage (10-bit, 3.3V reference)
+  float pinVoltage = (adcAvg / 1023.0) * 3.3;
 
   // Account for the resistor divider (1:1 → multiply by 2)
   _voltage = pinVoltage * ((BATT_R1 + BATT_R2) / BATT_R2);

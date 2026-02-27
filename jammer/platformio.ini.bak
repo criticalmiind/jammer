@@ -1,0 +1,29 @@
+; ================================================================
+; PlatformIO Configuration — Portable Wireless Research Tool
+; ================================================================
+; Board: ESP32 Wemos Lolin32
+; Framework: Arduino
+;
+; Usage:
+;   pio run              # Build
+;   pio run -t upload    # Upload to board
+;   pio device monitor   # Serial monitor
+; ================================================================
+
+[env:nodemcuv2]
+platform = espressif8266
+board = nodemcuv2
+framework = arduino
+monitor_speed = 115200
+upload_speed = 921600
+
+; ── Library Dependencies ──
+lib_deps =
+    adafruit/Adafruit SSD1306@^2.5.7
+    adafruit/Adafruit GFX Library@^1.11.5
+    adafruit/Adafruit BusIO@^1.14.1
+    nrf24/RF24@^1.4.7
+
+; ── Build Flags ──
+build_flags =
+    -DCORE_DEBUG_LEVEL=0

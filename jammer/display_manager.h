@@ -11,14 +11,28 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include "config.h"
+
+#ifdef USE_SH1106
+  #include <Adafruit_SH110X.h>
+  typedef Adafruit_SH1106G OLED_CLASS;
+  #define OLED_COLOR_WHITE SH110X_WHITE
+  #define OLED_COLOR_BLACK SH110X_BLACK
+#else
+  #include <Adafruit_SSD1306.h>
+  typedef Adafruit_SSD1306 OLED_CLASS;
+  #define OLED_COLOR_WHITE SSD1306_WHITE
+  #define OLED_COLOR_BLACK SSD1306_BLACK
+#endif
 
 // Initialize the OLED display. Returns false if not found.
 bool display_init();
 
-// Get a reference to the underlying Adafruit_SSD1306 object
-Adafruit_SSD1306& display_get();
+// Check if OLED is initialized correctly
+bool display_isOk();
+
+// Get a reference to the underlying OLED object
+OLED_CLASS& display_get();
 
 // Clear the entire display buffer
 void display_clear();

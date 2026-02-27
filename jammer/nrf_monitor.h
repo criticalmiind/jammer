@@ -21,6 +21,9 @@ void nrf_monitor_sweep(uint8_t channelData[]);
 // Get the peak channel from a sweep dataset
 uint8_t nrf_monitor_peakChannel(const uint8_t channelData[]);
 
+// Get a 0-100 intensity value for a specific channel
+uint8_t nrf_monitor_directionIntensity(uint8_t channel);
+
 // Check if the NRF module is connected and responding
 bool nrf_monitor_isConnected();
 

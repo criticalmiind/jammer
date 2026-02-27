@@ -15,10 +15,8 @@
 #include "menu_manager.h"
 #include "display_manager.h"
 #include "wifi_scanner.h"
-#include "ble_scanner.h"
 #include "nrf_monitor.h"
 #include "wifi_attacks.h"
-#include "ble_attacks.h"
 #include "packet_injection.h"
 #include "battery_manager.h"
 
@@ -34,9 +32,6 @@ static WifiNetwork _wifiResults[MAX_WIFI_RESULTS];
 static uint8_t     _wifiCount = 0;
 static bool        _wifiScanActive = false;
 
-// ── BLE scan results cache ───────────────────────────────────────
-static BleDevice _bleResults[MAX_BLE_RESULTS];
-static uint8_t   _bleCount = 0;
 
 // ── NRF spectrum data ────────────────────────────────────────────
 static uint8_t _nrfSpectrum[NRF_NUM_CHANNELS];
@@ -72,14 +67,13 @@ static void _setCursorBounds(uint8_t maxIdx) {
 // ── Main Menu ────────────────────────────────────────────────────
 static const char* _mainItems[] = {
   "WiFi Scanner",
-  "BLE Scanner",
   "2.4GHz Monitor",
   "Attacks",
   "Packet Counter",
   "System Info",
   "Settings"
 };
-static const uint8_t _mainCount = 7;
+static const uint8_t _mainCount = 6;
 
 static void _renderMainMenu() {
   display_statusBar(battery_getPercent(), "MENU");
@@ -131,7 +125,7 @@ static void _renderWifiDetail() {
   WifiNetwork& n = _wifiResults[_cursor];
 
   display_statusBar(battery_getPercent(), "Detail");
-  Adafruit_SSD1306& oled = display_get();
+  OLED_CLASS& oled = display_get();
   int16_t y = HEADER_HEIGHT + 2;
 
   oled.setCursor(0, y); oled.print(F("SSID: ")); oled.print(n.ssid);
@@ -154,7 +148,7 @@ static void _renderWifiDetail() {
 // ── WiFi Channel Occupancy ───────────────────────────────────────
 static void _renderWifiChannelOcc() {
   display_statusBar(battery_getPercent(), "ChOcc");
-  Adafruit_SSD1306& oled = display_get();
+  OLED_CLASS& oled = display_get();
 
   uint8_t chCount[15];
   wifi_scanner_channelOccupancy(_wifiResults, _wifiCount, chCount);
@@ -175,7 +169,7 @@ static void _renderWifiChannelOcc() {
     int16_t x = startX + (i - 1) * (barW + gap);
     int16_t h = map(chCount[i], 0, maxC, 0, maxH);
     if (h > 0) {
-      oled.fillRect(x, bottom - h, barW, h, SSD1306_WHITE);
+      oled.fillRect(x, bottom - h, barW, h, OLED_COLOR_WHITE);
     }
     // Channel number
     oled.setTextSize(1);
@@ -185,61 +179,8 @@ static void _renderWifiChannelOcc() {
   }
 }
 
-// ── BLE Sub-Menu ─────────────────────────────────────────────────
-static const char* _bleMenuItems[] = {
-  "Scan BLE Devices",
-  "Back"
-};
-static const uint8_t _bleMenuCount = 2;
-
-static void _renderBleMenu() {
-  display_statusBar(battery_getPercent(), "BLE");
-  display_list(_bleMenuItems, _bleMenuCount, _cursor, _scroll);
-}
-
 // ── BLE Scanning ─────────────────────────────────────────────────
-static void _renderBleScanning() {
-  display_progress("BLE Scanning...", 0);
-}
-
 // ── BLE Results ──────────────────────────────────────────────────
-static char _bleLabels[MAX_BLE_RESULTS][22];
-static const char* _bleLabelPtrs[MAX_BLE_RESULTS];
-
-static void _renderBleResults() {
-  display_statusBar(battery_getPercent(), "BLE");
-
-  Adafruit_SSD1306& oled = display_get();
-  // Device count header
-  char countBuf[24];
-  snprintf(countBuf, 24, "Found: %d devices", _bleCount);
-  oled.setCursor(0, HEADER_HEIGHT + 2);
-  oled.print(countBuf);
-
-  if (_bleCount == 0) return;
-
-  for (uint8_t i = 0; i < _bleCount; i++) {
-    snprintf(_bleLabels[i], 22, "%-10.10s %ddBm",
-             _bleResults[i].name, _bleResults[i].rssi);
-    _bleLabelPtrs[i] = _bleLabels[i];
-  }
-  // Shift list down to account for count header
-  uint8_t visItems = MENU_VISIBLE_ITEMS - 1;
-  int16_t y = HEADER_HEIGHT + 12;
-  for (uint8_t i = 0; i < visItems && (_scroll + i) < _bleCount; i++) {
-    uint8_t idx = _scroll + i;
-    if (idx == _cursor) {
-      display_get().fillRect(0, y - 1, SCREEN_WIDTH, ITEM_HEIGHT, SSD1306_WHITE);
-      display_get().setTextColor(SSD1306_BLACK);
-    } else {
-      display_get().setTextColor(SSD1306_WHITE);
-    }
-    display_get().setCursor(4, y);
-    display_get().print(_bleLabelPtrs[idx]);
-    y += ITEM_HEIGHT;
-  }
-  display_get().setTextColor(SSD1306_WHITE);
-}
 
 // ── NRF Sub-Menu ─────────────────────────────────────────────────
 static const char* _nrfMenuItems[] = {
@@ -256,7 +197,7 @@ static void _renderNrfMenu() {
 // ── NRF Spectrum Sweep ───────────────────────────────────────────
 static void _renderNrfSweep() {
   display_statusBar(battery_getPercent(), "2.4GHz");
-  Adafruit_SSD1306& oled = display_get();
+  OLED_CLASS& oled = display_get();
 
   // Draw spectrum bars
   int16_t bottom = 58;
@@ -265,7 +206,7 @@ static void _renderNrfSweep() {
 
   for (uint8_t i = 0; i < NRF_NUM_CHANNELS; i++) {
     int16_t x = map(i, 0, NRF_NUM_CHANNELS, 0, SCREEN_WIDTH);
-    display_vertBar(x, bottom, maxH, _nrfSpectrum[i], SWEEP_PASSES * 1);
+    display_vertBar(x, bottom, maxH, _nrfSpectrum[i], 10);
   }
 
   // Peak label
@@ -278,7 +219,6 @@ static void _renderNrfSweep() {
 // ── Attack Menu ──────────────────────────────────────────────────
 static const char* _attackMenuItems[] = {
   "WiFi Deauth",
-  "BLE Flood",
   "2.4GHz Jam",
   "Back"
 };
@@ -317,7 +257,7 @@ static void _renderDeauthConfirm() {
 // ── Deauth Running ───────────────────────────────────────────────
 static void _renderDeauthRunning() {
   display_statusBar(battery_getPercent(), "DEAUTH");
-  Adafruit_SSD1306& oled = display_get();
+  OLED_CLASS& oled = display_get();
 
   oled.setCursor(0, HEADER_HEIGHT + 4);
   oled.print(F("Target: "));
@@ -337,33 +277,7 @@ static void _renderDeauthRunning() {
 }
 
 // ── BLE Flood Confirm ────────────────────────────────────────────
-static void _renderBleFloodConfirm() {
-  display_confirmDialog(
-    "! BLE FLOOD !",
-    "Educational Only!",
-    "Is this YOUR network?"
-  );
-}
-
 // ── BLE Flood Running ────────────────────────────────────────────
-static void _renderBleFloodRunning() {
-  display_statusBar(battery_getPercent(), "BLE ATK");
-  Adafruit_SSD1306& oled = display_get();
-
-  oled.setCursor(0, HEADER_HEIGHT + 4);
-  oled.print(F("BLE Advert Flood"));
-
-  oled.setCursor(0, HEADER_HEIGHT + 18);
-  oled.print(F("Adverts: "));
-  oled.print(ble_attacks_getAdvCount());
-
-  oled.setCursor(0, HEADER_HEIGHT + 32);
-  oled.print(F("Status: ACTIVE"));
-
-  oled.setCursor(0, HEADER_HEIGHT + 44);
-  oled.print(F("[BACK] to stop"));
-}
-
 // ── NRF Jam Menu ─────────────────────────────────────────────────
 static const char* _jamModeItems[] = {
   "Constant (1ch)",
@@ -390,7 +304,7 @@ static void _renderNrfJamConfirm() {
 // ── NRF Jam Running ──────────────────────────────────────────────
 static void _renderNrfJamRunning() {
   display_statusBar(battery_getPercent(), "JAMMING");
-  Adafruit_SSD1306& oled = display_get();
+  OLED_CLASS& oled = display_get();
 
   const char* modeStr = "???";
   switch (_jamMode) {
@@ -416,7 +330,7 @@ static void _renderNrfJamRunning() {
 // ── Packet Counter ───────────────────────────────────────────────
 static void _renderPacketCounter() {
   display_statusBar(battery_getPercent(), "PKTS");
-  Adafruit_SSD1306& oled = display_get();
+  OLED_CLASS& oled = display_get();
 
   oled.setCursor(0, HEADER_HEIGHT + 4);
   oled.print(F("Packet Counter"));
@@ -437,7 +351,7 @@ static void _renderPacketCounter() {
 // ── System Info ──────────────────────────────────────────────────
 static void _renderSysInfo() {
   display_statusBar(battery_getPercent(), "INFO");
-  Adafruit_SSD1306& oled = display_get();
+  OLED_CLASS& oled = display_get();
   int16_t y = HEADER_HEIGHT + 2;
 
   oled.setCursor(0, y);
@@ -464,39 +378,39 @@ static void _renderSysInfo() {
 // ── Settings ─────────────────────────────────────────────────────
 static void _renderSettings() {
   display_statusBar(battery_getPercent(), "SET");
-  Adafruit_SSD1306& oled = display_get();
+  OLED_CLASS& oled = display_get();
   int16_t y = HEADER_HEIGHT + 2;
 
   // Brightness
   bool sel = (_cursor == 0);
-  if (sel) { oled.fillRect(0, y - 1, 128, ITEM_HEIGHT, SSD1306_WHITE); oled.setTextColor(SSD1306_BLACK); }
+  if (sel) { oled.fillRect(0, y - 1, 128, ITEM_HEIGHT, OLED_COLOR_WHITE); oled.setTextColor(OLED_COLOR_BLACK); }
   oled.setCursor(4, y);
   oled.printf("Brightness: %d", _brightness);
-  oled.setTextColor(SSD1306_WHITE);
+  oled.setTextColor(OLED_COLOR_WHITE);
   y += ITEM_HEIGHT;
 
   // Scan interval
   sel = (_cursor == 1);
-  if (sel) { oled.fillRect(0, y - 1, 128, ITEM_HEIGHT, SSD1306_WHITE); oled.setTextColor(SSD1306_BLACK); }
+  if (sel) { oled.fillRect(0, y - 1, 128, ITEM_HEIGHT, OLED_COLOR_WHITE); oled.setTextColor(OLED_COLOR_BLACK); }
   oled.setCursor(4, y);
   oled.printf("Scan Intv: %ds", _scanInterval / 1000);
-  oled.setTextColor(SSD1306_WHITE);
+  oled.setTextColor(OLED_COLOR_WHITE);
   y += ITEM_HEIGHT;
 
   // Deep sleep
   sel = (_cursor == 2);
-  if (sel) { oled.fillRect(0, y - 1, 128, ITEM_HEIGHT, SSD1306_WHITE); oled.setTextColor(SSD1306_BLACK); }
+  if (sel) { oled.fillRect(0, y - 1, 128, ITEM_HEIGHT, OLED_COLOR_WHITE); oled.setTextColor(OLED_COLOR_BLACK); }
   oled.setCursor(4, y);
   oled.print(F("Deep Sleep Now"));
-  oled.setTextColor(SSD1306_WHITE);
+  oled.setTextColor(OLED_COLOR_WHITE);
   y += ITEM_HEIGHT;
 
   // Back
   sel = (_cursor == 3);
-  if (sel) { oled.fillRect(0, y - 1, 128, ITEM_HEIGHT, SSD1306_WHITE); oled.setTextColor(SSD1306_BLACK); }
+  if (sel) { oled.fillRect(0, y - 1, 128, ITEM_HEIGHT, OLED_COLOR_WHITE); oled.setTextColor(OLED_COLOR_BLACK); }
   oled.setCursor(4, y);
   oled.print(F("Back"));
-  oled.setTextColor(SSD1306_WHITE);
+  oled.setTextColor(OLED_COLOR_WHITE);
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -509,8 +423,6 @@ static uint8_t _savedDeauthCursor = 0;  // Remember selected target for deauth
 static void _handleMainMenu(ButtonEvent evt);
 static void _handleWifiMenu(ButtonEvent evt);
 static void _handleWifiResults(ButtonEvent evt);
-static void _handleBleMenu(ButtonEvent evt);
-static void _handleBleResults(ButtonEvent evt);
 static void _handleNrfMenu(ButtonEvent evt);
 static void _handleAttackMenu(ButtonEvent evt);
 static void _handleSettings(ButtonEvent evt);
@@ -522,15 +434,14 @@ static void _handleMainMenu(ButtonEvent evt) {
     case BTN_EVT_SELECT:
       switch (_cursor) {
         case 0: _setState(STATE_WIFI_MENU); break;
-        case 1: _setState(STATE_BLE_MENU); break;
-        case 2: _setState(STATE_NRF_MENU); break;
-        case 3: _setState(STATE_ATTACK_MENU); break;
-        case 4:
+        case 1: _setState(STATE_NRF_MENU); break;
+        case 2: _setState(STATE_ATTACK_MENU); break;
+        case 3:
           wifi_attacks_startPacketCounter();
           _setState(STATE_PACKET_COUNTER);
           break;
-        case 5: _setState(STATE_SYSINFO); break;
-        case 6: _setState(STATE_SETTINGS); break;
+        case 4: _setState(STATE_SYSINFO); break;
+        case 5: _setState(STATE_SETTINGS); break;
       }
       break;
     default: break;
@@ -576,37 +487,6 @@ static void _handleWifiResults(ButtonEvent evt) {
   _setCursorBounds(_wifiCount > 0 ? _wifiCount - 1 : 0);
 }
 
-static void _handleBleMenu(ButtonEvent evt) {
-  switch (evt) {
-    case BTN_EVT_UP:    if (_cursor > 0) _cursor--; break;
-    case BTN_EVT_DOWN:  if (_cursor < _bleMenuCount - 1) _cursor++; break;
-    case BTN_EVT_BACK:  _setState(STATE_MAIN_MENU); return;
-    case BTN_EVT_SELECT:
-      switch (_cursor) {
-        case 0:
-          _setState(STATE_BLE_SCANNING);
-          break;
-        case 1:
-          _setState(STATE_MAIN_MENU);
-          break;
-      }
-      break;
-    default: break;
-  }
-}
-
-static void _handleBleResults(ButtonEvent evt) {
-  switch (evt) {
-    case BTN_EVT_UP:    if (_cursor > 0) _cursor--; break;
-    case BTN_EVT_DOWN:  if (_cursor < _bleCount - 1) _cursor++; break;
-    case BTN_EVT_BACK:
-      ble_scanner_deinit();
-      _setState(STATE_BLE_MENU);
-      break;
-    default: break;
-  }
-  _setCursorBounds(_bleCount > 0 ? _bleCount - 1 : 0);
-}
 
 static void _handleNrfMenu(ButtonEvent evt) {
   switch (evt) {
@@ -631,13 +511,10 @@ static void _handleAttackMenu(ButtonEvent evt) {
         case 0:  // WiFi Deauth — need targets
           _setState(STATE_WIFI_DEAUTH_SELECT);
           break;
-        case 1:  // BLE Flood
-          _setState(STATE_BLE_FLOOD_CONFIRM);
-          break;
-        case 2:  // 2.4GHz Jam
+        case 1:  // 2.4GHz Jam
           _setState(STATE_NRF_JAM_MENU);
           break;
-        case 3:  // Back
+        case 2:  // Back
           _setState(STATE_MAIN_MENU);
           break;
       }
@@ -652,22 +529,20 @@ static void _handleSettings(ButtonEvent evt) {
     case BTN_EVT_UP:    if (_cursor > 0) _cursor--; break;
     case BTN_EVT_DOWN:  if (_cursor < 3) _cursor++; break;
     case BTN_EVT_BACK:  _setState(STATE_MAIN_MENU); return;
-    case BTN_EVT_LEFT:
-      if (_cursor == 0 && _brightness >= 25) { _brightness -= 25; display_setBrightness(_brightness); }
-      if (_cursor == 1 && _scanInterval > 1000) _scanInterval -= 1000;
-      break;
-    case BTN_EVT_RIGHT:
-      if (_cursor == 0 && _brightness <= 230) { _brightness += 25; display_setBrightness(_brightness); }
-      if (_cursor == 1 && _scanInterval < 30000) _scanInterval += 1000;
-      break;
     case BTN_EVT_SELECT:
+      if (_cursor == 0 && _brightness <= 230) { _brightness += 25; display_setBrightness(_brightness); }
+      else if (_cursor == 0) { _brightness = 25; display_setBrightness(_brightness); }
+      
+      if (_cursor == 1 && _scanInterval < 30000) _scanInterval += 1000;
+      else if (_cursor == 1) _scanInterval = 1000;
+
       if (_cursor == 2) {
         // Deep sleep
         display_clear();
         display_centerText("Deep Sleep...", 28, 1);
         display_update();
         delay(1000);
-        esp_deep_sleep_start();
+        ESP.deepSleep(0);
       }
       if (_cursor == 3) _setState(STATE_MAIN_MENU);
       break;
@@ -715,14 +590,7 @@ void menu_update(ButtonEvent evt) {
     }
   }
 
-  // ── BLE scan (blocking but handled in state entry) ──────────
-  if (_state == STATE_BLE_SCANNING) {
-    ble_scanner_init();
-    _bleCount = ble_scanner_scan(_bleResults, MAX_BLE_RESULTS);
-    _setState(STATE_BLE_RESULTS);
-  }
-
-  // ── NRF sweep continuous ────────────────────────────────────
+    // ── NRF sweep continuous ────────────────────────────────────
   if (_state == STATE_NRF_SWEEP) {
     nrf_monitor_sweep(_nrfSpectrum);
     if (evt == BTN_EVT_BACK) {
@@ -736,15 +604,6 @@ void menu_update(ButtonEvent evt) {
     wifi_attacks_update();
     if (evt == BTN_EVT_BACK) {
       wifi_attacks_deauth_stop();
-      _setState(STATE_ATTACK_MENU);
-      return;
-    }
-  }
-
-  if (_state == STATE_BLE_FLOOD_RUNNING) {
-    ble_attacks_update();
-    if (evt == BTN_EVT_BACK) {
-      ble_attacks_flood_stop();
       _setState(STATE_ATTACK_MENU);
       return;
     }
@@ -771,8 +630,8 @@ void menu_update(ButtonEvent evt) {
       case STATE_WIFI_CHANNEL_OCC:
         if (evt == BTN_EVT_BACK) _setState(STATE_WIFI_MENU);
         break;
-      case STATE_BLE_MENU:           _handleBleMenu(evt); break;
-      case STATE_BLE_RESULTS:        _handleBleResults(evt); break;
+      
+      
       case STATE_NRF_MENU:           _handleNrfMenu(evt); break;
       case STATE_ATTACK_MENU:        _handleAttackMenu(evt); break;
 
@@ -790,7 +649,7 @@ void menu_update(ButtonEvent evt) {
 
       // Deauth confirm
       case STATE_WIFI_DEAUTH_CONFIRM:
-        if (evt == BTN_EVT_BACK || evt == BTN_EVT_LEFT) {
+        if (evt == BTN_EVT_BACK || evt == BTN_EVT_SELECT) {
           _setState(STATE_WIFI_DEAUTH_SELECT);
         }
         if (evt == BTN_EVT_SELECT) {
@@ -801,18 +660,6 @@ void menu_update(ButtonEvent evt) {
           );
           _cursor = _savedDeauthCursor;
           _setState(STATE_WIFI_DEAUTH_RUNNING);
-        }
-        break;
-
-      // BLE flood confirm
-      case STATE_BLE_FLOOD_CONFIRM:
-        if (evt == BTN_EVT_BACK || evt == BTN_EVT_LEFT) {
-          _setState(STATE_ATTACK_MENU);
-        }
-        if (evt == BTN_EVT_SELECT) {
-          ble_attacks_init();
-          ble_attacks_flood_start();
-          _setState(STATE_BLE_FLOOD_RUNNING);
         }
         break;
 
@@ -831,7 +678,7 @@ void menu_update(ButtonEvent evt) {
 
       // NRF jam confirm
       case STATE_NRF_JAM_CONFIRM:
-        if (evt == BTN_EVT_BACK || evt == BTN_EVT_LEFT) {
+        if (evt == BTN_EVT_BACK || evt == BTN_EVT_SELECT) {
           _setState(STATE_NRF_JAM_MENU);
         }
         if (evt == BTN_EVT_SELECT) {
@@ -876,17 +723,15 @@ void menu_update(ButtonEvent evt) {
     case STATE_WIFI_RESULTS:       _renderWifiResults();      break;
     case STATE_WIFI_DETAIL:        _renderWifiDetail();       break;
     case STATE_WIFI_CHANNEL_OCC:   _renderWifiChannelOcc();   break;
-    case STATE_BLE_MENU:           _renderBleMenu();          break;
-    case STATE_BLE_SCANNING:       _renderBleScanning();      break;
-    case STATE_BLE_RESULTS:        _renderBleResults();       break;
+    
+    
+    
     case STATE_NRF_MENU:           _renderNrfMenu();          break;
     case STATE_NRF_SWEEP:          _renderNrfSweep();         break;
     case STATE_ATTACK_MENU:        _renderAttackMenu();       break;
     case STATE_WIFI_DEAUTH_SELECT: _renderDeauthSelect();     break;
     case STATE_WIFI_DEAUTH_CONFIRM:_renderDeauthConfirm();    break;
     case STATE_WIFI_DEAUTH_RUNNING:_renderDeauthRunning();    break;
-    case STATE_BLE_FLOOD_CONFIRM:  _renderBleFloodConfirm();  break;
-    case STATE_BLE_FLOOD_RUNNING:  _renderBleFloodRunning();  break;
     case STATE_NRF_JAM_MENU:       _renderNrfJamMenu();       break;
     case STATE_NRF_JAM_CONFIRM:    _renderNrfJamConfirm();    break;
     case STATE_NRF_JAM_RUNNING:    _renderNrfJamRunning();    break;
@@ -909,11 +754,8 @@ const char* menu_getModeLabel() {
     case STATE_WIFI_RESULTS:
     case STATE_WIFI_DETAIL:
     case STATE_WIFI_CHANNEL_OCC:     return "WiFi";
-    case STATE_BLE_SCANNING:
-    case STATE_BLE_RESULTS:          return "BLE";
     case STATE_NRF_SWEEP:            return "NRF";
     case STATE_WIFI_DEAUTH_RUNNING:  return "DEAUTH";
-    case STATE_BLE_FLOOD_RUNNING:    return "BLE ATK";
     case STATE_NRF_JAM_RUNNING:      return "JAM";
     case STATE_PACKET_COUNTER:       return "PKTS";
     case STATE_SYSINFO:              return "INFO";

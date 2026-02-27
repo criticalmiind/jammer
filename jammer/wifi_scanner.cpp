@@ -83,14 +83,12 @@ void wifi_scanner_sortByRSSI(WifiNetwork results[], uint8_t count) {
  */
 const char* wifi_scanner_encLabel(uint8_t encType) {
   switch (encType) {
-    case WIFI_AUTH_OPEN:            return "OPEN";
-    case WIFI_AUTH_WEP:             return "WEP";
-    case WIFI_AUTH_WPA_PSK:         return "WPA";
-    case WIFI_AUTH_WPA2_PSK:        return "WPA2";
-    case WIFI_AUTH_WPA_WPA2_PSK:    return "WPA+2";
-    case WIFI_AUTH_WPA2_ENTERPRISE: return "ENT";
-    case WIFI_AUTH_WPA3_PSK:        return "WPA3";
-    default:                        return "???";
+    case ENC_TYPE_NONE: return "OPEN";
+    case ENC_TYPE_WEP:  return "WEP";
+    case ENC_TYPE_TKIP: return "WPA";
+    case ENC_TYPE_CCMP: return "WPA2";
+    case ENC_TYPE_AUTO: return "WPA*";
+    default:            return "???";
   }
 }
 

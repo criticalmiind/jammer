@@ -19,10 +19,7 @@
 
 #include "packet_injection.h"
 
-// HSPI instance shared by modules #2 and #3
-static SPIClass _hspi(HSPI);
-static RF24 _radio2(NRF2_CE, NRF2_CSN);
-static RF24 _radio3(NRF3_CE, NRF3_CSN);
+static RF24 _radio(NRF1_CE, NRF1_CSN);
 
 static NrfJamState _state = NJAM_IDLE;
 static NrfJamMode  _mode  = NJAM_MODE_HOPPING;
@@ -31,8 +28,7 @@ static uint8_t  _endCh   = 125;
 static uint8_t  _currentCh = 0;
 static uint32_t _txCount = 0;
 static unsigned long _lastTx = 0;
-static bool _radio2ok = false;
-static bool _radio3ok = false;
+static bool _radioOk = false;
 
 // Noise payload — random-looking data to maximize spectral spread
 static const uint8_t _noisePayload[32] = {
@@ -50,7 +46,8 @@ static const uint8_t _jamAddr[5] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
  * Common initialization for a jammer radio.
  */
 static bool _initRadio(RF24& radio, const char* label) {
-  if (!radio.begin(&_hspi)) {
+  SPI.begin();
+  if (!radio.begin()) {
     DBGF("[NRF] %s NOT detected\n", label);
     return false;
   }
@@ -66,16 +63,18 @@ static bool _initRadio(RF24& radio, const char* label) {
   return true;
 }
 
-/*
- * packet_injection_init()
- * Initializes both NRF modules on the HSPI bus.
- */
 bool packet_injection_init() {
-  _hspi.begin(14, 12, 13);   // SCK, MISO, MOSI
-  _radio2ok = _initRadio(_radio2, "Module #2");
-  _radio3ok = _initRadio(_radio3, "Module #3");
+  _radioOk = _initRadio(_radio, "Module #1");
   DBGLN(F("[NRF] Packet injection subsystem ready"));
-  return _radio2ok || _radio3ok;
+  return _radioOk;
+}
+
+bool packet_injection_getRadio2Ok() {
+  return _radioOk;
+}
+
+bool packet_injection_getRadio3Ok() {
+  return false;
 }
 
 /*
@@ -95,8 +94,7 @@ void packet_injection_jam_start(uint8_t startCh, uint8_t endCh, NrfJamMode mode)
 }
 
 void packet_injection_jam_stop() {
-  if (_radio2ok) _radio2.stopListening();
-  if (_radio3ok) _radio3.stopListening();
+  if (_radioOk) _radio.stopListening();
   _state = NJAM_STOPPED;
   DBGF("[NRF] Jam stopped. TX count: %lu\n", _txCount);
 }
@@ -106,14 +104,9 @@ void packet_injection_jam_stop() {
  * Sends the noise payload on the given channel using both radios.
  */
 static void _txNoise(uint8_t ch) {
-  if (_radio2ok) {
-    _radio2.setChannel(ch);
-    _radio2.write(_noisePayload, 32, true);  // true = no-ACK
-  }
-  if (_radio3ok) {
-    uint8_t ch3 = (ch + 1 <= 125) ? ch + 1 : ch;  // Offset by 1 for wider coverage
-    _radio3.setChannel(ch3);
-    _radio3.write(_noisePayload, 32, true);
+  if (_radioOk) {
+    _radio.setChannel(ch);
+    _radio.write(_noisePayload, 32, true);  // true = no-ACK
   }
   _txCount++;
 }
@@ -134,7 +127,7 @@ void packet_injection_update() {
     case NJAM_MODE_HOPPING:
       // Rapid random hopping within range
       {
-        uint8_t ch = _startCh + (esp_random() % (_endCh - _startCh + 1));
+        uint8_t ch = random(_startCh, _endCh + 1);
         _txNoise(ch);
       }
       break;
@@ -164,16 +157,16 @@ uint32_t packet_injection_getTxCount() {
  */
 bool packet_injection_send(uint8_t channel, const uint8_t addr[5],
                            const uint8_t* payload, uint8_t len) {
-  if (!_radio2ok) return false;
+  if (!_radioOk) return false;
 
-  _radio2.setChannel(channel);
-  _radio2.openWritingPipe(addr);
-  _radio2.setPayloadSize(len);
-  bool ok = _radio2.write(payload, len, true);
+  _radio.setChannel(channel);
+  _radio.openWritingPipe(addr);
+  _radio.setPayloadSize(len);
+  bool ok = _radio.write(payload, len, true);
 
   // Restore jam address
-  _radio2.openWritingPipe(_jamAddr);
-  _radio2.setPayloadSize(32);
+  _radio.openWritingPipe(_jamAddr);
+  _radio.setPayloadSize(32);
 
   DBGF("[NRF] Custom inject ch%d len=%d ok=%d\n", channel, len, ok);
   _txCount++;

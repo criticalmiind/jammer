@@ -9,8 +9,6 @@
 
 #include "nrf_monitor.h"
 
-// VSPI instance for NRF module #1
-static SPIClass _vspi(VSPI);
 static RF24 _radio(NRF1_CE, NRF1_CSN);
 static bool _connected = false;
 
@@ -21,8 +19,8 @@ static bool _connected = false;
  * Initializes the radio in receive mode with auto-ack off.
  */
 bool nrf_monitor_init() {
-  _vspi.begin(18, 19, 23, NRF1_CSN);    // SCK, MISO, MOSI, SS
-  if (!_radio.begin(&_vspi)) {
+  SPI.begin();
+  if (!_radio.begin()) {
     DBGLN(F("[NRF] Module #1 NOT detected"));
     _connected = false;
     return false;
@@ -78,6 +76,32 @@ uint8_t nrf_monitor_peakChannel(const uint8_t channelData[]) {
     }
   }
   return peak;
+}
+
+/*
+ * nrf_monitor_directionIntensity()
+ * Rapidly samples a specific channel for Carrier Detect.
+ * Returns a value 0-100 percentage.
+ */
+uint8_t nrf_monitor_directionIntensity(uint8_t channel) {
+  if (!_connected) return 0;
+  
+  _radio.setChannel(channel);
+  _radio.startListening();
+  
+  uint16_t hits = 0;
+  const uint16_t samples = 100;
+  
+  for (uint16_t i = 0; i < samples; i++) {
+    delayMicroseconds(NRF_SWEEP_DELAY_US);
+    if (_radio.testCarrier()) {
+      hits++;
+    }
+  }
+  _radio.stopListening();
+  
+  // Calculate percentage
+  return (hits * 100) / samples;
 }
 
 bool nrf_monitor_isConnected() {

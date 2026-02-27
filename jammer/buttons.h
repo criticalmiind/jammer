@@ -13,8 +13,6 @@ enum ButtonEvent {
   BTN_NONE = 0,
   BTN_EVT_UP,
   BTN_EVT_DOWN,
-  BTN_EVT_LEFT,
-  BTN_EVT_RIGHT,
   BTN_EVT_SELECT,
   BTN_EVT_BACK
 };

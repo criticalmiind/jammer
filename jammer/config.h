@@ -15,10 +15,10 @@
 
 // ── Firmware Version ────────────────────────────────────────────
 #define FW_VERSION "1.0.0"
-#define FW_NAME   "WRT-ESP32"
+#define FW_NAME   "WRT-ESP8266"
 
 // ── Debug Toggle ────────────────────────────────────────────────
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
   #define DBG(x)   Serial.print(x)
   #define DBGLN(x) Serial.println(x)
@@ -34,35 +34,35 @@
 #define SCREEN_HEIGHT   64
 #define OLED_RESET      -1        // No reset pin
 #define OLED_ADDR       0x3C      // I2C address (try 0x3D if blank)
-#define SDA_PIN         21
-#define SCL_PIN         22
+#define SDA_PIN         4         // D2
+#define SCL_PIN         5         // D1
+
+// Uncomment the specific OLED driver for your screen:
+#define USE_SH1106      1         // 1.3" OLEDs (DST-013, SH1106G, etc)
+// #define USE_SSD1306    1         // 0.96" OLEDs
 
 // ── Navigation Buttons (active LOW, internal pull-up) ───────────
-#define BTN_UP          32
-#define BTN_DOWN        33
-#define BTN_LEFT        25
-#define BTN_RIGHT       26
-#define BTN_SELECT      27
-#define BTN_BACK        15        // GPIO15 (avoids HSPI conflict on 14)
+#define BTN_UP          0         // D3
+#define BTN_DOWN        2         // D4
+#define BTN_SELECT      14        // D5
+#define BTN_BACK        12        // D6
 
 #define BTN_DEBOUNCE_MS 200       // Debounce period in milliseconds
 
-// ── NRF24L01 Module #1 — VSPI (primary scanner) ────────────────
-#define NRF1_CE         4
-#define NRF1_CSN        5
-// VSPI defaults: SCK=18, MOSI=23, MISO=19
-
-// ── NRF24L01 Module #2 — HSPI (secondary / jammer) ─────────────
-#define NRF2_CE         16
-#define NRF2_CSN        17
-// HSPI: SCK=14, MOSI=13, MISO=12
-
-// ── NRF24L01 Module #3 — HSPI (shared bus, different CS) ────────
-#define NRF3_CE         2
-#define NRF3_CSN        0
+// ── NRF24L01 Module #1 — SPI (primary scanner/jammer) ──────────
+#define NRF1_CE         16        // D0
+#define NRF1_CSN        15        // D8
+// SPI defaults: SCK=14 (D5), MOSI=13 (D7), MISO=12 (D6)
+// Wait, D5 and D6 are used for SCK/MISO, so we shouldn't use them for buttons!
+// Let's redefine buttons:
+// D3 (0), D4 (2), TX (1), RX (3)
+#undef BTN_SELECT
+#undef BTN_BACK
+#define BTN_SELECT      1         // TX
+#define BTN_BACK        3         // RX
 
 // ── Battery ADC ─────────────────────────────────────────────────
-#define BATTERY_PIN     34        // ADC1_CH6 — input only
+#define BATTERY_PIN     A0        // ADC0 - input only
 #define BATT_R1         100000.0  // Top resistor of divider (Ω)
 #define BATT_R2         100000.0  // Bottom resistor of divider (Ω)
 #define BATT_SAMPLES    16        // ADC averaging samples

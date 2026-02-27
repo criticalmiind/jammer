@@ -29,6 +29,8 @@ enum NrfJamMode {
 
 // Initialize NRF modules #2 and #3 for jamming/injection
 bool packet_injection_init();
+bool packet_injection_getRadio2Ok();
+bool packet_injection_getRadio3Ok();
 
 // Start NRF jamming on a given channel range
 // startCh and endCh are 0-125 (2400+ch MHz)

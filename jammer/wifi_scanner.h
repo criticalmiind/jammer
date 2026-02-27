@@ -6,7 +6,7 @@
 #define WIFI_SCANNER_H
 
 #include <Arduino.h>
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
 #include "config.h"
 
 // Structure holding one scanned WiFi network's info
