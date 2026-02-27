@@ -1,7 +1,8 @@
 /*
- * wifi_attacks.h — WiFi deauthentication & interference detection
+ * wifi_attacks.h — WiFi deauth, beacon flood, & interference detection
  *
  * ⚠ EDUCATIONAL USE ONLY — Controlled lab environments.
+ * Created by: Shawal Ahmad Mohmand
  */
 
 #ifndef WIFI_ATTACKS_H
@@ -11,49 +12,35 @@
 #include "config.h"
 #include "wifi_scanner.h"
 
-// WiFi attack state
 enum WifiAttackState {
   WATK_IDLE = 0,
-  WATK_CONFIRMING,      // Waiting for user confirmation
-  WATK_RUNNING,         // Deauth in progress
+  WATK_CONFIRMING,
+  WATK_RUNNING,
   WATK_STOPPED
 };
 
-// Initialize WiFi attack subsystem (promiscuous mode setup)
+// Initialize WiFi attack subsystem
 void wifi_attacks_init();
 
-// Start deauthentication attack on a target network.
-// Requires prior call to wifi_attacks_init().
-// bssid = target AP BSSID, channel = AP channel.
+// --- Deauthentication ---
 void wifi_attacks_deauth_start(const uint8_t bssid[6], uint8_t channel);
-
-// Stop the running deauth attack
 void wifi_attacks_deauth_stop();
-
-// Non-blocking update — sends deauth frames in bursts.
-// Call every loop(). Returns the number of frames sent this call.
 uint16_t wifi_attacks_update();
-
-// Get current state
 WifiAttackState wifi_attacks_getState();
-
-// Get total frames sent since attack started
 uint32_t wifi_attacks_getFrameCount();
 
-// Enable promiscuous mode for packet counting
+// --- Beacon Flood (Fake APs) ---
+void wifi_attacks_beacon_start();
+void wifi_attacks_beacon_stop();
+void wifi_attacks_beacon_update();
+bool wifi_attacks_beacon_isRunning();
+uint32_t wifi_attacks_beacon_getCount();
+
+// --- Packet Counter ---
 void wifi_attacks_startPacketCounter();
-
-// Stop promiscuous mode
 void wifi_attacks_stopPacketCounter();
-
-// Get total packets seen
 uint32_t wifi_attacks_getPacketCount();
-
-// Reset packet counter
 void wifi_attacks_resetPacketCount();
-
-// Detect potential deauth flood — returns true if detects
-// an abnormally high rate of deauth/disassoc frames
 bool wifi_attacks_detectInterference();
 
 #endif // WIFI_ATTACKS_H

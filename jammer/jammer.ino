@@ -1,39 +1,29 @@
 /*
- * jammer.ino — Main entry point for WRT-ESP8266
+ * jammer.ino — ShadowNet PRO Main Entry Point
  *
- * Firmware for ESP8266 NodeMCU V2
- * Provides WiFi scanning, automated attacks (Deauth), and 2.4GHz
- * spectrum jamming for educational wireless security research.
+ * Created by: Shawal Ahmad Mohmand
+ * Contact: +92 304 975 8182
+ *
+ * ESP8266 NodeMCU V2 — WiFi Analysis & Wireless Security Research Tool
  */
 
 #include <Arduino.h>
 #include <Wire.h>
 
-// Core subsystems
 #include "config.h"
 #include "display_manager.h"
 #include "buttons.h"
 #include "menu_manager.h"
-
-// Scanners & RF
 #include "wifi_scanner.h"
 #include "nrf_monitor.h"
-
-// Attacks
 #include "wifi_attacks.h"
 #include "packet_injection.h"
-
-// Utility
 #include "battery_manager.h"
 #include "web_server.h"
+#include "evil_twin.h"
 
-// ────────────────────────────────────────────────────────────────
-
-// Splash screen timer
 static unsigned long _splashStart = 0;
 static bool _inSplash = true;
-
-// ────────────────────────────────────────────────────────────────
 
 void setup() {
 #if DEBUG
@@ -41,41 +31,40 @@ void setup() {
   delay(10);
   DBGLN(F("\n\n"));
   DBGLN(F("========================================"));
-  DBGF("[SYSTEM] Starting %s (v%s)\n", FW_NAME, FW_VERSION);
+  DBGF("[SYS] Starting %s v%s\n", FW_NAME, FW_VERSION);
+  DBGF("[SYS] By %s\n", FW_AUTHOR);
   DBGLN(F("========================================"));
 #endif
 
-  // 1. Initialize Display
+  // 1. Display
   if (!display_init()) {
-    DBGLN(F("[FATAL] Display initialization failed. Halting."));
     while (1) { delay(100); }
   }
 
-  // Show splash directly
   display_splash();
   _splashStart = millis();
 
-  // 2. Initialize Hardware / Utility
+  // 2. Hardware
   buttons_init();
   battery_init();
 
-  // 3. Initialize Scanners
-  // (WiFi begins in Station mode but disconnected)
+  // 3. Scanners
   wifi_scanner_init();
 
-  // 4. Initialize NRF modules
-  // We check which modules are present and set internal flags
-  // These init calls also configure SPI
-  bool nrf1Ok = nrf_monitor_init();
-  bool nrfJamOk = packet_injection_init();
+  // 4. NRF modules
+  nrf_monitor_init();
+  packet_injection_init();
 
-  // 5. Initialize Attacks subsystem
+  // 5. Attacks
   wifi_attacks_init();
 
-  // 6. Initialize App State & Menu
+  // 6. Web dashboard
+  web_server_init();
+
+  // 7. Menu
   menu_init();
 
-  DBGLN(F("[SYSTEM] Boot sequence complete."));
+  DBGLN(F("[SYS] ShadowNet PRO boot complete."));
 }
 
 void loop() {
@@ -84,36 +73,30 @@ void loop() {
       _inSplash = false;
       display_clear();
       display_update();
-      DBGLN(F("[SYSTEM] Entering main app logic."));
     } else {
-      // Pump buttons to clear any held state during boot
       buttons_poll();
       delay(10);
       return;
     }
   }
 
-  // --- Main Application Loop ---
-
-  // 1. Read inputs
+  // 1. Input
   ButtonEvent evt = buttons_poll();
 
-  // 2. Read sensors / utility
+  // 2. Sensors
   battery_update();
+
+  // 3. Web dashboard
   web_server_update();
 
-  // 3. Service asynchronous subsystems
-  packet_injection_update(); // Handles non-blocking jam transmission
-  
-  // 4. Service App Logic / UI
-  // menu_update() controls state transitions and handles user input
+  // 4. Attack services
+  wifi_attacks_beacon_update();
+  evil_twin_update();
+  packet_injection_update();
+
+  // 5. UI
   menu_update(evt);
 
-  // 5. Render
-  // _render() is called by menu_update, so we don't need a separate call here
-  // display_update() might be called inside menu rendering.
-
-  // Yield to watchdog and system tasks
   yield();
   delay(5);
 }

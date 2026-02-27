@@ -76,30 +76,76 @@ void display_setBrightness(uint8_t brightness) {
 
 void display_splash() {
   if (!_oledOk) return;
+
+  // Phase 1: Matrix-style init
   _oled.clearDisplay();
-
   _oled.setTextSize(1);
-  _oled.setCursor(10, 4);
-  _oled.print(F("WIRELESS RESEARCH"));
+  _oled.setTextColor(OLED_COLOR_WHITE);
+  
+  _oled.setCursor(0, 0);
+  _oled.print(F("[SYS] Booting kernel..."));
+  _oled.display(); delay(300);
+  
+  _oled.setCursor(0, 9);
+  _oled.print(F("[NET] Initializing RF..."));
+  _oled.display(); delay(250);
+  
+  _oled.setCursor(0, 18);
+  _oled.print(F("[SEC] Loading modules..."));
+  _oled.display(); delay(250);
+  
+  _oled.setCursor(0, 27);
+  _oled.print(F("[AUTH] Authenticating..."));
+  _oled.display(); delay(400);
 
-  _oled.setCursor(40, 16);
-  _oled.setTextSize(1);
-  _oled.print(F("TOOL"));
+  // Loading bar
+  _oled.drawRect(10, 40, 108, 8, OLED_COLOR_WHITE);
+  for (int i = 0; i <= 100; i += 5) {
+    int16_t w = map(i, 0, 100, 0, 106);
+    _oled.fillRect(11, 41, w, 6, OLED_COLOR_WHITE);
+    _oled.display();
+    delay(30);
+  }
+  
+  _oled.setCursor(20, 52);
+  _oled.print(F("ACCESS GRANTED"));
+  _oled.display(); delay(600);
 
+  // Phase 2: Branding
+  _oled.clearDisplay();
+  
+  // ShadowNet PRO title
   _oled.setTextSize(1);
-  _oled.setCursor(36, 30);
-  _oled.print(F("v"));
-  _oled.print(F(FW_VERSION));
-
-  _oled.setCursor(4, 46);
-  _oled.setTextSize(1);
+  _oled.setCursor(14, 2);
+  _oled.print(F(">> ShadowNet PRO <<"));
+  
+  // Version
+  _oled.setCursor(40, 14);
+  _oled.print(F("v")); _oled.print(F(FW_VERSION));
+  
+  // Divider
+  for (int x = 10; x < 118; x += 2) {
+    _oled.drawPixel(x, 23, OLED_COLOR_WHITE);
+  }
+  
+  // Creator info
+  _oled.setCursor(6, 27);
+  _oled.print(F("By: Shawal A. Mohmand"));
+  
+  _oled.setCursor(10, 38);
+  _oled.print(F("+92 304 975 8182"));
+  
+  // Divider
+  for (int x = 10; x < 118; x += 2) {
+    _oled.drawPixel(x, 48, OLED_COLOR_WHITE);
+  }
+  
+  _oled.setCursor(4, 52);
   _oled.print(F("Educational Use Only"));
-
-  _oled.setCursor(16, 56);
-  _oled.print(F("Lab Testing Only"));
-
+  
   _oled.display();
 }
+
 
 void display_statusBar(uint8_t battPct, const char* modeLabel) {
   if (!_oledOk) return;
