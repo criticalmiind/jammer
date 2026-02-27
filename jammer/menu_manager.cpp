@@ -15,6 +15,7 @@
 #include "packet_injection.h"
 #include "battery_manager.h"
 #include "evil_twin.h"
+#include "settings.h"
 
 // ── State ────────────────────────────────────────────────────────
 static AppState _state = STATE_SPLASH;
@@ -381,7 +382,7 @@ static void _renderAbout() {
   for (int x = 6; x < 122; x += 2) oled.drawPixel(x, 52, OLED_COLOR_WHITE);
 
   oled.setCursor(6, 55);
-  oled.print(F("Search Google for me"));
+  oled.print(F("Search Google for more!"));
 }
 
 // ── Settings ────────────────────────────────────────────────────
@@ -390,14 +391,16 @@ static void _renderSettings() {
   OLED_CLASS& oled = display_get();
   int16_t y = HEADER_HEIGHT + 2;
 
-  const char* settLabels[] = {"Brightness", "Scan Intv", "Deep Sleep", "Back"};
-  char settVals[4][16];
-  snprintf(settVals[0], 16, "%d", _brightness);
-  snprintf(settVals[1], 16, "%ds", _scanInterval / 1000);
-  snprintf(settVals[2], 16, "Now");
-  snprintf(settVals[3], 16, "");
+  const char* settLabels[] = {"AP State", "Hardware Test", "Brightness", "Scan Intv", "Deep Sleep", "Back"};
+  char settVals[6][16];
+  snprintf(settVals[0], 16, globalSettings.ap_on ? "ON" : "OFF");
+  snprintf(settVals[1], 16, ""); // Hardware test
+  snprintf(settVals[2], 16, "%d", _brightness);
+  snprintf(settVals[3], 16, "%ds", _scanInterval / 1000);
+  snprintf(settVals[4], 16, "Now");
+  snprintf(settVals[5], 16, "");
 
-  for (uint8_t i = 0; i < 4; i++) {
+  for (uint8_t i = 0; i < 6; i++) {
     bool sel = (_cursor == i);
     if (sel) { oled.fillRect(0, y - 1, 128, ITEM_HEIGHT, OLED_COLOR_WHITE); oled.setTextColor(OLED_COLOR_BLACK); }
     oled.setCursor(4, y);
@@ -406,6 +409,31 @@ static void _renderSettings() {
     oled.setTextColor(OLED_COLOR_WHITE);
     y += ITEM_HEIGHT;
   }
+}
+
+// ── Hardware Test ───────────────────────────────────────────────
+static void _renderHardwareTest() {
+  display_statusBar(battery_getPercent(), "DIAG");
+  OLED_CLASS& oled = display_get();
+  int16_t y = HEADER_HEIGHT + 3;
+  
+  oled.setCursor(0, y);
+  oled.print(F("Display: OK (I2C)")); y += 10;
+  
+  oled.setCursor(0, y);
+  oled.print(F("Battery: "));
+  oled.print(battery_getVoltage()); oled.print("v"); y += 10;
+  
+  oled.setCursor(0, y);
+  oled.print(F("NRF24L01: "));
+  oled.print(nrf_monitor_isConnected() ? "CONNECTED" : "NOT FOUND!"); y += 10;
+
+  oled.setCursor(0, y);
+  oled.print(F("WiFi RF: "));
+  oled.print(WiFi.status() != WL_NO_SHIELD ? "OK" : "ERROR"); y += 10;
+  
+  oled.setCursor(0, HEADER_HEIGHT + 45);
+  oled.print(F("[BACK] to exit"));
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -499,24 +527,36 @@ static void _handleAttackMenu(ButtonEvent evt) {
 static void _handleSettings(ButtonEvent evt) {
   switch (evt) {
     case BTN_EVT_UP:    if (_cursor > 0) _cursor--; break;
-    case BTN_EVT_DOWN:  if (_cursor < 3) _cursor++; break;
+    case BTN_EVT_DOWN:  if (_cursor < 5) _cursor++; break;
     case BTN_EVT_BACK:  _setState(STATE_MAIN_MENU); return;
     case BTN_EVT_SELECT:
       if (_cursor == 0) {
+        globalSettings.ap_on = !globalSettings.ap_on;
+        settings_save();
+        display_clear();
+        display_centerText("Rebooting...", 28, 1);
+        display_update();
+        delay(1000);
+        ESP.restart();
+      }
+      if (_cursor == 1) {
+        _setState(STATE_HW_DIAG);
+      }
+      if (_cursor == 2) {
         _brightness = (_brightness >= 230) ? 25 : _brightness + 25;
         display_setBrightness(_brightness);
       }
-      if (_cursor == 1) {
+      if (_cursor == 3) {
         _scanInterval = (_scanInterval >= 30000) ? 1000 : _scanInterval + 1000;
       }
-      if (_cursor == 2) {
+      if (_cursor == 4) {
         display_clear();
         display_centerText("Deep Sleep...", 28, 1);
         display_update();
         delay(1000);
         ESP.deepSleep(0);
       }
-      if (_cursor == 3) _setState(STATE_MAIN_MENU);
+      if (_cursor == 5) _setState(STATE_MAIN_MENU);
       break;
     default: break;
   }
@@ -531,8 +571,38 @@ void menu_init() {
   DBGLN(F("[MENU] ShadowNet PRO menu initialized"));
 }
 
+#include <ESP8266WiFi.h>
+
 void menu_update(ButtonEvent evt) {
   unsigned long now = millis();
+
+  // ── Remote Control Lock ──────────────────────────────────────
+  if (WiFi.softAPgetStationNum() > 0 && !evil_twin_isRunning()) {
+    // If we're not in the splash screen, take over the UI
+    if (_state != STATE_SPLASH) {
+      if (now - _lastRender >= UI_REFRESH_MS) {
+        _lastRender = now;
+        display_clear();
+        display_statusBar(battery_getPercent(), "REMOTE");
+        OLED_CLASS& oled = display_get();
+        oled.setCursor(0, HEADER_HEIGHT + 4);
+        oled.print(F("Remote Control"));
+        oled.setCursor(0, HEADER_HEIGHT + 14);
+        oled.print(F("Active"));
+        
+        oled.setCursor(0, HEADER_HEIGHT + 28);
+        oled.print(F("IP: "));
+        oled.print(WiFi.softAPIP().toString().c_str());
+        
+        oled.setCursor(0, HEADER_HEIGHT + 42);
+        oled.print(F("Using from mobile"));
+        oled.setCursor(0, HEADER_HEIGHT + 52);
+        oled.print(F("- buttons locked -"));
+        display_update();
+      }
+      return; // Block inputs and UI updates
+    }
+  }
 
   // ── Splash auto-transition ──────────────────────────────────
   if (_state == STATE_SPLASH) {
@@ -696,6 +766,10 @@ void menu_update(ButtonEvent evt) {
         _handleSettings(evt);
         break;
 
+      case STATE_HW_DIAG:
+        if (evt == BTN_EVT_BACK) _setState(STATE_SETTINGS);
+        break;
+
       default: break;
     }
   }
@@ -728,6 +802,7 @@ void menu_update(ButtonEvent evt) {
     case STATE_SYSINFO:             _renderSysInfo();        break;
     case STATE_ABOUT:               _renderAbout();          break;
     case STATE_SETTINGS:            _renderSettings();       break;
+    case STATE_HW_DIAG:             _renderHardwareTest();   break;
     default: break;
   }
 

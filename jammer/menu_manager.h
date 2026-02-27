@@ -48,6 +48,7 @@ enum AppState {
   STATE_ABOUT,
   // Settings
   STATE_SETTINGS,
+  STATE_HW_DIAG,
 
   STATE_COUNT
 };
